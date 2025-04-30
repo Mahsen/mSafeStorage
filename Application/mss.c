@@ -50,6 +50,7 @@ struct {
         unsigned long Length;
         unsigned char Mode;
         unsigned long Time_Secound;
+        unsigned long CRC;
     } Group[MSS_STORAGE_GROUP_SIZE];
 } MSS_Storage_Map;
 
@@ -168,10 +169,14 @@ int MSS_Group_Config(void* Name, unsigned long Length, unsigned char Mode, unsig
 
     if((!Name) || (!Length))
         return MSS_INVALID_PARAMETER;
-    else if(Mode && ((Mode & MSS_MODE_SAFE) || (Mode & MSS_MODE_ENCRRYPT) || (Mode & MSS_MODE_UPDATE_WITH_CHANGE) || (Mode & MSS_MODE_UPDATE_WITH_TIME)))
+    else if(Mode && (!((Mode & MSS_MODE_WRITE_SAFE) || (Mode & MSS_MODE_READ_SAFE) || (Mode & MSS_MODE_ENCRRYPT) || (Mode & MSS_MODE_UPDATE_WITH_CHANGE) || (Mode & MSS_MODE_UPDATE_WITH_TIME))))
         return MSS_INVALID_MODE;
-    else if((Mode & MSS_MODE_ENCRRYPT) && (Length%MSS_VALIDx_ENCRYPT_LENGTH))
+    else if((Mode & MSS_MODE_ENCRRYPT) && (Length%MSS_VALID_ENCRYPT_LENGTH))
         return MSS_INVALID_ENCRYPT_LENGTH;
+    else if((Mode & MSS_MODE_WRITE_SAFE) && (Length%MSS_VALID_CHECK_LENGTH))
+        return MSS_INVALID_CHECK_LENGTH;
+    else if((Mode & MSS_MODE_READ_SAFE) && (Length%MSS_VALID_CHECK_LENGTH))
+        return MSS_INVALID_CHECK_LENGTH;
     else if((Mode & MSS_MODE_ENCRRYPT) && ((!MSS_Storage_Encrypt) || (!MSS_Storage_Decrypt)))
         return MSS_INVALID_ENCRYPT_FUNC;
     else if((Mode & MSS_MODE_UPDATE_WITH_TIME) && (!Time_Secound))
@@ -198,6 +203,7 @@ int MSS_Group_Config(void* Name, unsigned long Length, unsigned char Mode, unsig
     MSS_Storage_Map.Group[i].Length = Length;
     MSS_Storage_Map.Group[i].Mode = Mode;
     MSS_Storage_Map.Group[i].Time_Secound = Time_Secound;
+    MSS_Storage_Map.Group[i].CRC = 0;
 
     MSS_Storage_Prepere();
     MSS_Storage_Write(0, (unsigned char *)&MSS_Storage_Map, sizeof(MSS_Storage_Map));
@@ -207,6 +213,9 @@ int MSS_Group_Config(void* Name, unsigned long Length, unsigned char Mode, unsig
 /*--------------------------------------------------------------------------------------------------------------------*/
 int MSS_Group_Update(void* Name) {
 
+    unsigned long CRC, CRC_Feed, Div;
+    unsigned char Data_Feed[MSS_VALID_CHECK_LENGTH];
+
     if(!Name)
         return MSS_INVALID_PARAMETER;
 
@@ -218,16 +227,36 @@ int MSS_Group_Update(void* Name) {
     if(i == MSS_STORAGE_GROUP_SIZE)
         return MSS_GROUP_NOTFIND;
 
-    MSS_Storage_Prepere();
+    Div = MSS_Storage_Map.Group[i].Length / MSS_VALID_CHECK_LENGTH;
+
     if(MSS_Storage_Map.Group[i].Mode & MSS_MODE_ENCRRYPT)
         MSS_Storage_Encrypt((unsigned char *)MSS_Storage_Map.Group[i].Name, MSS_Storage_Map.Group[i].Length);
+    if((MSS_Storage_Map.Group[i].Mode & MSS_MODE_WRITE_SAFE) || (MSS_Storage_Map.Group[i].Mode & MSS_MODE_READ_SAFE)) {
+        CRC = 0;
+        for (unsigned long a = 0; a<Div; a++) 
+            CRC += MSS_GetCRC(&((unsigned char *)MSS_Storage_Map.Group[i].Name)[(a*MSS_VALID_CHECK_LENGTH)], MSS_VALID_CHECK_LENGTH);
+        MSS_Storage_Map.Group[i].CRC = CRC;
+    }
+    MSS_Storage_Prepere();
     MSS_Storage_Write(MSS_Storage_Map.Group[i].Offset, (unsigned char *)MSS_Storage_Map.Group[i].Name, MSS_Storage_Map.Group[i].Length);
-
+    if(MSS_Storage_Map.Group[i].Mode & MSS_MODE_WRITE_SAFE) {
+        CRC_Feed = 0;
+        for (unsigned long a = 0; a<Div; a++) {
+            MSS_Storage_Prepere();
+            MSS_Storage_Read((MSS_Storage_Map.Group[i].Offset+(a*MSS_VALID_CHECK_LENGTH)), Data_Feed, MSS_VALID_CHECK_LENGTH);
+            CRC_Feed += MSS_GetCRC(Data_Feed, MSS_VALID_CHECK_LENGTH);
+        }
+        if(CRC != CRC_Feed) 
+            return MSS_WRITE_WRONG;
+    }
+    
     return MSS_SUCCEED;
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
 int MSS_Group_Refresh(void* Name) {
 
+    unsigned long Div, CRC_Feed;
+
     if(!Name)
         return MSS_INVALID_PARAMETER;
 
@@ -239,8 +268,17 @@ int MSS_Group_Refresh(void* Name) {
     if(i == MSS_STORAGE_GROUP_SIZE)
         return MSS_GROUP_NOTFIND;
 
+    Div = MSS_Storage_Map.Group[i].Length / MSS_VALID_CHECK_LENGTH;
+
     MSS_Storage_Prepere();
     MSS_Storage_Read(MSS_Storage_Map.Group[i].Offset, (unsigned char *)MSS_Storage_Map.Group[i].Name, MSS_Storage_Map.Group[i].Length);
+    if(MSS_Storage_Map.Group[i].Mode & MSS_MODE_READ_SAFE) {
+        CRC_Feed = 0;
+        for (unsigned long a = 0; a<Div; a++) 
+            CRC_Feed += MSS_GetCRC(&((unsigned char *)MSS_Storage_Map.Group[i].Name)[(a*MSS_VALID_CHECK_LENGTH)], MSS_VALID_CHECK_LENGTH);
+        if(MSS_Storage_Map.Group[i].CRC != CRC_Feed)
+            return MSS_READ_WRONG;
+    }
     if(MSS_Storage_Map.Group[i].Mode & MSS_MODE_ENCRRYPT)
         MSS_Storage_Decrypt((unsigned char *)MSS_Storage_Map.Group[i].Name, MSS_Storage_Map.Group[i].Length);
 

@@ -1,11 +1,12 @@
 #ifndef __BILLING_H
 #define __BILLING_H
 //----------------------------------------------------------
-#define MSS_STORAGE_GROUP_SIZE               2
+#define MSS_STORAGE_GROUP_SIZE               4
 
 #define MSS_STORAGE_TIME_OPEN                5
 
-#define MSS_VALIDx_ENCRYPT_LENGTH            16
+#define MSS_VALID_ENCRYPT_LENGTH            16
+#define MSS_VALID_CHECK_LENGTH              16
 
 #define MSS_SUCCEED                          0
 #define MSS_INVALID_PARAMETER                -1
@@ -17,12 +18,16 @@
 #define MSS_INVALID_TIME                     -7
 #define MSS_INVALID_MODE                     -8
 #define MSS_INVALID_ENCRYPT_FUNC             -9
+#define MSS_WRITE_WRONG                      -10
+#define MSS_INVALID_CHECK_LENGTH             -11
+#define MSS_READ_WRONG                       -12
 
 #define MSS_MODE_DEFAULT                     (1 << 0)
-#define MSS_MODE_SAFE                        (1 << 1)
-#define MSS_MODE_ENCRRYPT                    (1 << 2)
-#define MSS_MODE_UPDATE_WITH_CHANGE          (1 << 3)
-#define MSS_MODE_UPDATE_WITH_TIME            (1 << 4)
+#define MSS_MODE_WRITE_SAFE                  (1 << 1)
+#define MSS_MODE_READ_SAFE                   (1 << 2)
+#define MSS_MODE_ENCRRYPT                    (1 << 3)
+#define MSS_MODE_UPDATE_WITH_CHANGE          (1 << 4)
+#define MSS_MODE_UPDATE_WITH_TIME            (1 << 5)
 //----------------------------------------------------------
 void MSS_Refresh_Every_Second(void);
 int MSS_Storage_Config(unsigned int Version,
@@ -38,4 +43,5 @@ int MSS_Group_Update(void* Name);
 int MSS_Group_Refresh(void* Name);
 int MSS_Group_Sub_Update(void* Sub, unsigned long Sub_Length);
 int MSS_Group_Sub_Refresh(void* Sub, unsigned long Sub_Length);
+//----------------------------------------------------------
 #endif
