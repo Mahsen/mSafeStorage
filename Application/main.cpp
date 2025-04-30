@@ -72,6 +72,12 @@ void MAIN_Write(unsigned long Offset, unsigned char *Data, unsigned long Length)
         perror("Failed to write all bytes");
         return;
     }
+
+    // Flush the buffer to ensure data is written to the file immediately
+    if (fflush(file) != 0) {
+        perror("Failed to flush the file buffer");
+        return;
+    }
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
 void MAIN_Read(unsigned long Offset, unsigned char *Data, unsigned long Length) {
@@ -98,11 +104,13 @@ int main() {
     std::cout << "Start." << std::endl;
 
     struct {
+        std::string Name;
         int Voltage;
         int Current;
     } Power;
+    std::cout << "Size Power : " << sizeof(Power) << std::endl;
 
-    int err = MSS_Storage_Config(1,
+    int err = MSS_Storage_Config(6,
         10000,
         0,
         0,
@@ -112,20 +120,21 @@ int main() {
         MAIN_Read);
     std::cout << "MSS_Storage_Config err : " << err << std::endl;
 
-    err = MSS_Group_Config(&Power, sizeof(Power), MSS_MODE_DEFAULT, 0);
+    err = MSS_Group_Config(&Power, sizeof(Power), MSS_MODE_DEFAULT | MSS_MODE_WRITE_SAFE | MSS_MODE_READ_SAFE, 0);
     std::cout << "MSS_Group_Config err : " << err << std::endl;
 
-    Power.Voltage = 222;
+    Power.Name = "Meter_101";
+    Power.Voltage = 220;
     Power.Current = 10;
-    std::cout << "Power.Voltage = " << Power.Voltage << " - Power.Current = " << Power.Current << std::endl;
+    std::cout << "Power.Name = " << Power.Name << " - Power.Voltage = " << Power.Voltage << " - Power.Current = " << Power.Current << std::endl;
 
-    //err = MSS_Group_Update(&Power);
-    //std::cout << "MSS_Group_Update err : " << err << std::endl;
+    err = MSS_Group_Update(&Power);
+    std::cout << "MSS_Group_Update err : " << err << std::endl;
 
     err = MSS_Group_Refresh(&Power);
     std::cout << "MSS_Group_Refresh err : " << err << std::endl;
-
-    std::cout << "Power.Voltage = " << Power.Voltage << " - Power.Current = " << Power.Current << std::endl;
+    
+    std::cout << "Power.Name = " << Power.Name << " - Power.Voltage = " << Power.Voltage << " - Power.Current = " << Power.Current << std::endl;
 
     return 0;
 }
