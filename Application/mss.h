@@ -1,6 +1,8 @@
 #ifndef __BILLING_H
 #define __BILLING_H
 //----------------------------------------------------------
+#define MSS_ABILITY_AUTO_SAVE                0
+
 #define MSS_STORAGE_GROUP_SIZE               4
 
 #define MSS_STORAGE_TIME_OPEN                5
