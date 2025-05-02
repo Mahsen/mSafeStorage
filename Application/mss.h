@@ -21,13 +21,16 @@
 #define MSS_WRITE_WRONG                      -10
 #define MSS_INVALID_CHECK_LENGTH             -11
 #define MSS_READ_WRONG                       -12
+#define MSS_WRITE_BACKUP_WRONG               -13
+#define MSS_READ_BACKUP_WRONG                -14
 
 #define MSS_MODE_DEFAULT                     (1 << 0)
 #define MSS_MODE_WRITE_SAFE                  (1 << 1)
 #define MSS_MODE_READ_SAFE                   (1 << 2)
-#define MSS_MODE_ENCRRYPT                    (1 << 3)
-#define MSS_MODE_UPDATE_WITH_CHANGE          (1 << 4)
-#define MSS_MODE_UPDATE_WITH_TIME            (1 << 5)
+#define MSS_MODE_BACKUP                      (1 << 3)
+#define MSS_MODE_ENCRRYPT                    (1 << 4)
+#define MSS_MODE_UPDATE_WITH_CHANGE          (1 << 5)
+#define MSS_MODE_UPDATE_WITH_TIME            (1 << 6)
 //----------------------------------------------------------
 void MSS_Refresh_Every_Second(void);
 int MSS_Storage_Config(unsigned int Version,
