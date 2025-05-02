@@ -10,7 +10,7 @@
     Site : https://www.mahsen.ir
     Tel : +989124662703
     Email : info@mahsen.ir
-    Last Update : 2025/4/30
+    Last Update : 2025/5/2
 */
 /************************************************** Warnings **********************************************************/
 /*
@@ -49,7 +49,7 @@ struct {
         unsigned long Offset;
         unsigned long Length;
         unsigned char Mode;
-        unsigned long Time_Secound;
+        unsigned long Parm;
         unsigned long CRC;
     } Group[MSS_STORAGE_GROUP_SIZE];
 } MSS_Storage_Map;
@@ -141,7 +141,7 @@ int MSS_Storage_Map_Config(unsigned int Version) {
     return MSS_SUCCEED;
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
-int MSS_Storage_Config(unsigned int Version,
+int MSS_Config_Storage(unsigned int Version,
                         unsigned long Size,
                         void (*Encrypt)(unsigned char *Data, unsigned long Length),
                         void (*Decrypt)(unsigned char *Data, unsigned long Length),
@@ -165,12 +165,14 @@ int MSS_Storage_Config(unsigned int Version,
     return MSS_Storage_Map_Config(Version);
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
-int MSS_Group_Config(void* Name, unsigned long Length, unsigned char Mode, unsigned int Time_Secound) {
+int MSS_Config_Group(void* Name, unsigned long Length, unsigned char Mode, unsigned long Parm) {
 
     if((!Name) || (!Length))
         return MSS_INVALID_PARAMETER;
-    else if(Mode && (!((Mode & MSS_MODE_BACKUP) || (Mode & MSS_MODE_WRITE_SAFE) || (Mode & MSS_MODE_READ_SAFE) || (Mode & MSS_MODE_ENCRRYPT) || (Mode & MSS_MODE_UPDATE_WITH_CHANGE) || (Mode & MSS_MODE_UPDATE_WITH_TIME))))
+    else if(Mode && (!((Mode & MSS_MODE_RECORDS) || (Mode & MSS_MODE_BACKUP) || (Mode & MSS_MODE_WRITE_SAFE) || (Mode & MSS_MODE_READ_SAFE) || (Mode & MSS_MODE_ENCRRYPT) || (Mode & MSS_MODE_UPDATE_WITH_CHANGE) || (Mode & MSS_MODE_UPDATE_WITH_TIME))))
         return MSS_INVALID_MODE;
+    else if((Mode & MSS_MODE_RECORDS) && ((Mode & MSS_MODE_UPDATE_WITH_CHANGE) || (Mode & MSS_MODE_UPDATE_WITH_TIME) || (Mode & MSS_MODE_BACKUP) || (Mode & MSS_MODE_WRITE_SAFE) || (Mode & MSS_MODE_READ_SAFE) || (Mode & MSS_MODE_ENCRRYPT)))
+        return MSS_CONFLICT_MODE;
     else if((Mode & MSS_MODE_ENCRRYPT) && (Length%MSS_VALID_ENCRYPT_LENGTH))
         return MSS_INVALID_ENCRYPT_LENGTH;
     else if((Mode & MSS_MODE_WRITE_SAFE) && (Length%MSS_VALID_CHECK_LENGTH))
@@ -179,8 +181,10 @@ int MSS_Group_Config(void* Name, unsigned long Length, unsigned char Mode, unsig
         return MSS_INVALID_CHECK_LENGTH;
     else if((Mode & MSS_MODE_ENCRRYPT) && ((!MSS_Storage_Encrypt) || (!MSS_Storage_Decrypt)))
         return MSS_INVALID_ENCRYPT_FUNC;
-    else if((Mode & MSS_MODE_UPDATE_WITH_TIME) && (!Time_Secound))
+    else if((Mode & MSS_MODE_UPDATE_WITH_TIME) && (!Parm))
         return MSS_INVALID_TIME;
+    else if((Mode & MSS_MODE_RECORDS) && (!Parm))
+        return MSS_INVALID_COUNT;
 
     unsigned long Offset = sizeof(MSS_Storage_Map);
 
@@ -188,9 +192,14 @@ int MSS_Group_Config(void* Name, unsigned long Length, unsigned char Mode, unsig
     for (; i < MSS_STORAGE_GROUP_SIZE; i++) {
         if (Name == MSS_Storage_Map.Group[i].Name)
             return MSS_SUCCEED;
-        if (!MSS_Storage_Map.Group[i].Name)
+        else if (!MSS_Storage_Map.Group[i].Name)
             break;
-        Offset += MSS_Storage_Map.Group[i].Length;
+        else if(MSS_Storage_Map.Group[i].Mode & MSS_MODE_RECORDS)
+            Offset += (MSS_Storage_Map.Group[i].Length * MSS_Storage_Map.Group[i].Parm);
+        else if(MSS_Storage_Map.Group[i].Mode & MSS_MODE_BACKUP)
+            Offset += (MSS_Storage_Map.Group[i].Length * 2);
+        else
+            Offset += MSS_Storage_Map.Group[i].Length;
     }
 
     if (Mode & MSS_MODE_BACKUP)
@@ -198,14 +207,16 @@ int MSS_Group_Config(void* Name, unsigned long Length, unsigned char Mode, unsig
 
     if(i == MSS_STORAGE_GROUP_SIZE)
         return MSS_GROUP_FULL;
-    else if((MSS_Storage_Map.Group[i].Offset + Length) > MSS_Storage_Size)
+    else if((Offset + Length) > MSS_Storage_Size)
+        return MSS_STORAGE_FULL;
+    else if((Mode & MSS_MODE_RECORDS) && ((Offset + (Length * Parm)) > MSS_Storage_Size))
         return MSS_STORAGE_FULL;
 
     MSS_Storage_Map.Group[i].Name = Name;
     MSS_Storage_Map.Group[i].Offset = Offset;
     MSS_Storage_Map.Group[i].Length = Length;
     MSS_Storage_Map.Group[i].Mode = Mode;
-    MSS_Storage_Map.Group[i].Time_Secound = Time_Secound;
+    MSS_Storage_Map.Group[i].Parm = Parm;
     MSS_Storage_Map.Group[i].CRC = 0;
 
     MSS_Storage_Prepere();
@@ -214,7 +225,7 @@ int MSS_Group_Config(void* Name, unsigned long Length, unsigned char Mode, unsig
     return MSS_SUCCEED;
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
-int MSS_Group_Update(void* Name) {
+int MSS_Update_Group(void* Name) {
 
     unsigned long CRC, CRC_Feed, Div;
     unsigned char Data_Feed[MSS_VALID_CHECK_LENGTH];
@@ -229,6 +240,8 @@ int MSS_Group_Update(void* Name) {
 
     if(i == MSS_STORAGE_GROUP_SIZE)
         return MSS_GROUP_NOTFIND;
+    else if (MSS_Storage_Map.Group[i].Mode & MSS_MODE_RECORDS)
+        return MSS_CAN_NOT_RUN;
 
     Div = MSS_Storage_Map.Group[i].Length / MSS_VALID_CHECK_LENGTH;
 
@@ -271,7 +284,7 @@ int MSS_Group_Update(void* Name) {
     return MSS_SUCCEED;
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
-int MSS_Group_Refresh(void* Name) {
+int MSS_Refresh_Group(void* Name) {
 
     unsigned long Div, CRC_Feed;
 
@@ -285,6 +298,8 @@ int MSS_Group_Refresh(void* Name) {
 
     if(i == MSS_STORAGE_GROUP_SIZE)
         return MSS_GROUP_NOTFIND;
+    else if(MSS_Storage_Map.Group[i].Mode & MSS_MODE_RECORDS)
+        return MSS_CAN_NOT_RUN;
 
     Div = MSS_Storage_Map.Group[i].Length / MSS_VALID_CHECK_LENGTH;
 
@@ -314,7 +329,7 @@ int MSS_Group_Refresh(void* Name) {
     return MSS_SUCCEED;
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
-int MSS_Group_Sub_Update(void* Sub, unsigned long Sub_Length) {
+int MSS_Update_Group_Sub(void* Sub, unsigned long Sub_Length) {
 
     if((!Sub) || (!Sub_Length))
         return MSS_INVALID_PARAMETER;
@@ -331,13 +346,16 @@ int MSS_Group_Sub_Update(void* Sub, unsigned long Sub_Length) {
     if(i == MSS_STORAGE_GROUP_SIZE)
         return MSS_GROUP_NOTFIND;
 
+    if ((MSS_Storage_Map.Group[i].Mode & MSS_MODE_BACKUP) || (MSS_Storage_Map.Group[i].Mode & MSS_MODE_READ_SAFE) || (MSS_Storage_Map.Group[i].Mode & MSS_MODE_RECORDS))
+        return MSS_CAN_NOT_RUN;
+
     MSS_Storage_Prepere();
     MSS_Storage_Write(MSS_Storage_Map.Group[i].Offset + Offset_Sub, (unsigned char *)Sub, Sub_Length);
 
     return MSS_SUCCEED;
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
-int MSS_Group_Sub_Refresh(void* Sub, unsigned long Sub_Length) {
+int MSS_Refresh_Group_Sub(void* Sub, unsigned long Sub_Length) {
 
     if((!Sub) || (!Sub_Length))
         return MSS_INVALID_PARAMETER;
@@ -354,8 +372,64 @@ int MSS_Group_Sub_Refresh(void* Sub, unsigned long Sub_Length) {
     if(i == MSS_STORAGE_GROUP_SIZE)
         return MSS_GROUP_NOTFIND;
     
+    if ((MSS_Storage_Map.Group[i].Mode & MSS_MODE_BACKUP) || (MSS_Storage_Map.Group[i].Mode & MSS_MODE_READ_SAFE) || (MSS_Storage_Map.Group[i].Mode & MSS_MODE_RECORDS))
+        return MSS_CAN_NOT_RUN;
+
     MSS_Storage_Prepere();
     MSS_Storage_Read(MSS_Storage_Map.Group[i].Offset + Offset_Sub, (unsigned char *)Sub, Sub_Length);
+
+    return MSS_SUCCEED;
+}
+/*--------------------------------------------------------------------------------------------------------------------*/
+int MSS_Update_Group_Record(void* Name, unsigned long Record) {
+
+    if(!Name)
+        return MSS_INVALID_PARAMETER;
+
+    int i = 0;
+    for (; i < MSS_STORAGE_GROUP_SIZE; i++)
+        if (Name == MSS_Storage_Map.Group[i].Name)
+            break;
+
+    if(i == MSS_STORAGE_GROUP_SIZE)
+        return MSS_GROUP_NOTFIND;
+    else if (!(MSS_Storage_Map.Group[i].Mode & MSS_MODE_RECORDS))
+        return MSS_CAN_NOT_RUN;
+    else if(Record >= MSS_Storage_Map.Group[i].Parm)
+        return MSS_INVALID_RECORD;
+
+    if(MSS_Storage_Map.Group[i].Mode & MSS_MODE_ENCRRYPT)
+        MSS_Storage_Encrypt((unsigned char *)MSS_Storage_Map.Group[i].Name, MSS_Storage_Map.Group[i].Length);
+
+    MSS_Storage_Prepere();
+    MSS_Storage_Write((MSS_Storage_Map.Group[i].Offset+(MSS_Storage_Map.Group[i].Length*Record)), (unsigned char *)MSS_Storage_Map.Group[i].Name, MSS_Storage_Map.Group[i].Length);
+    
+    return MSS_SUCCEED;
+}
+/*--------------------------------------------------------------------------------------------------------------------*/
+int MSS_Refresh_Group_Record(void* Name, unsigned long Record) {
+
+    if(!Name)
+        return MSS_INVALID_PARAMETER;
+
+    int i = 0;
+    for (; i < MSS_STORAGE_GROUP_SIZE; i++)
+        if (Name == MSS_Storage_Map.Group[i].Name)
+            break;
+
+    if(i == MSS_STORAGE_GROUP_SIZE)
+        return MSS_GROUP_NOTFIND;
+    else if (!(MSS_Storage_Map.Group[i].Mode & MSS_MODE_RECORDS))
+        return MSS_CAN_NOT_RUN;
+    else if(Record >= MSS_Storage_Map.Group[i].Parm)
+        return MSS_INVALID_RECORD;
+    
+
+    MSS_Storage_Prepere();
+    MSS_Storage_Read((MSS_Storage_Map.Group[i].Offset+(MSS_Storage_Map.Group[i].Length*Record)), (unsigned char *)MSS_Storage_Map.Group[i].Name, MSS_Storage_Map.Group[i].Length);
+    
+    if(MSS_Storage_Map.Group[i].Mode & MSS_MODE_ENCRRYPT)
+        MSS_Storage_Decrypt((unsigned char *)MSS_Storage_Map.Group[i].Name, MSS_Storage_Map.Group[i].Length);
 
     return MSS_SUCCEED;
 }
