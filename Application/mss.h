@@ -7,9 +7,10 @@
 
 #define MSS_STORAGE_TIME_OPEN                5
 
-#define MSS_VALID_ENCRYPT_LENGTH            16
-#define MSS_VALID_CHECK_LENGTH              16
+#define MSS_VALID_ENCRYPT_LENGTH             16
+#define MSS_VALID_CHECK_LENGTH               16
 
+#define MSS_SUCCEED_VERSION                  1
 #define MSS_SUCCEED                          0
 #define MSS_INVALID_PARAMETER                -1
 #define MSS_STORAGE_TOO_SMALL                -2

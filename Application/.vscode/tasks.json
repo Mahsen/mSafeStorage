@@ -5,7 +5,6 @@
             "label": "C/C++: g++ build active file",
             "command": "/usr/bin/g++",
             "args": [
-                "-Wdeprecated",
                 "-fdiagnostics-color=always",
                 "-g",
                 "${workspaceFolder}/*.c",

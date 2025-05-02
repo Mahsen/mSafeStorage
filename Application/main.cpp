@@ -10,7 +10,7 @@
     Site : https://www.mahsen.ir
     Tel : +989124662703
     Email : info@mahsen.ir
-    Last Update : 2025/4/30
+    Last Update : 2025/5/2
 */
 /************************************************** Warnings **********************************************************/
 /*
@@ -43,6 +43,16 @@ const char* filename = "memory.db";
     Nothing
 */
 /************************************************** Functions *********************************************************/
+void MAIN_Encrypt(unsigned char *Data, unsigned long Length) {
+    for (unsigned long i=0; i < Length; i++)
+        Data[i] += 10;
+}
+/*--------------------------------------------------------------------------------------------------------------------*/
+void MAIN_Decrypt(unsigned char *Data, unsigned long Length) {
+    for (unsigned long i=0; i < Length; i++)
+        Data[i] -= 10;
+}
+/*--------------------------------------------------------------------------------------------------------------------*/
 void MAIN_Open(void) {
     file = fopen(filename, "r+b");  // Open file for read/write in binary mode
     if (!file) {
@@ -110,31 +120,55 @@ int main() {
     } Power;
     std::cout << "Size Power : " << sizeof(Power) << std::endl;
 
-    int err = MSS_Storage_Config(6,
+    int err = MSS_Config_Storage(4,
         10000,
-        0,
-        0,
+        MAIN_Encrypt,
+        MAIN_Decrypt,
         MAIN_Open, 
         MAIN_Close, 
         MAIN_Write, 
         MAIN_Read);
-    std::cout << "MSS_Storage_Config err : " << err << std::endl;
+    std::cout << "MSS_Config_Storage err : " << err << std::endl;
 
-    err = MSS_Group_Config(&Power, sizeof(Power), MSS_MODE_DEFAULT | MSS_MODE_WRITE_SAFE | MSS_MODE_READ_SAFE, 0);
-    std::cout << "MSS_Group_Config err : " << err << std::endl;
+    err = MSS_Config_Group(&Power, sizeof(Power), MSS_MODE_WRITE_SAFE | MSS_MODE_READ_SAFE | MSS_MODE_BACKUP | MSS_MODE_ENCRRYPT, 0);
+    std::cout << "MSS_Config_Group err : " << err << std::endl;
 
     Power.Name = "Meter_101";
     Power.Voltage = 220;
     Power.Current = 10;
     std::cout << "Power.Name = " << Power.Name << " - Power.Voltage = " << Power.Voltage << " - Power.Current = " << Power.Current << std::endl;
 
-    err = MSS_Group_Update(&Power);
-    std::cout << "MSS_Group_Update err : " << err << std::endl;
+    err = MSS_Update_Group(&Power);
+    std::cout << "MSS_Update_Group err : " << err << std::endl;
 
-    err = MSS_Group_Refresh(&Power);
-    std::cout << "MSS_Group_Refresh err : " << err << std::endl;
+    err = MSS_Refresh_Group(&Power);
+    std::cout << "MSS_Refresh_Group err : " << err << std::endl;
     
     std::cout << "Power.Name = " << Power.Name << " - Power.Voltage = " << Power.Voltage << " - Power.Current = " << Power.Current << std::endl;
+
+    std::cout << "----------------------------------------------------------------" << std::endl;
+
+    struct {
+        int Code;
+        int Value;
+    } Event;
+
+    err = MSS_Config_Group(&Event, sizeof(Event), MSS_MODE_RECORDS, 1000);
+    std::cout << "MSS_Config_Group err : " << err << std::endl;
+
+    // for (int i=0; i < 1000; i++) {
+    //     Event.Code = 1000-i;
+    //     Event.Value = i;
+    //     std::cout << "Event.Code = " << Event.Code << " - Power.Value = " << Event.Value << std::endl;
+    //     err = MSS_Update_Group_Record(&Event, i);
+    //     std::cout << "MSS_Update_Group_Record err : " << err << std::endl;
+    // }
+    
+    // for (unsigned long i=0; i < 1000; i++) {
+    //     err = MSS_Refresh_Group_Record(&Event, i);
+    //     std::cout << "MSS_Refresh_Group_Record err : " << err << std::endl;
+    //     std::cout << "Event.Code = " << Event.Code << " - Power.Value = " << Event.Value << std::endl;
+    // }
 
     return 0;
 }

@@ -50,7 +50,6 @@ struct {
         unsigned long Length;
         unsigned char Mode;
         unsigned long Parm;
-        unsigned long CRC;
         unsigned long Timer;
     } Group[MSS_STORAGE_GROUP_SIZE];
 } MSS_Storage_Map;
@@ -128,7 +127,7 @@ void MSS_Storage_Prepere(void) {
 int MSS_Storage_Map_Config(unsigned int Version) {
 
     MSS_Storage_Prepere();
-    MSS_Storage_Read(0, (unsigned char *)&MSS_Storage_Map, sizeof(MSS_Storage_Map));
+    MSS_Storage_Read(0, (unsigned char *)&MSS_Storage_Map.Version, sizeof(MSS_Storage_Map.Version));
     if(MSS_Storage_Map.Version != Version) {
         for (int i = 0; i < MSS_STORAGE_GROUP_SIZE; i++) {
             MSS_Storage_Map.Group[i].Name = 0;            // Set Name to NULL
@@ -136,7 +135,8 @@ int MSS_Storage_Map_Config(unsigned int Version) {
             MSS_Storage_Map.Group[i].Length = 0;          // Default Length
         }
         MSS_Storage_Map.Version = Version;
-        MSS_Storage_Write(0, (unsigned char *)&MSS_Storage_Map, sizeof(MSS_Storage_Map));
+        MSS_Storage_Write(0, (unsigned char *)&MSS_Storage_Map.Version, sizeof(MSS_Storage_Map.Version));
+        return MSS_SUCCEED_VERSION;
     }
 
     return MSS_SUCCEED;
@@ -192,7 +192,7 @@ int MSS_Config_Group(void* Name, unsigned long Length, unsigned char Mode, unsig
     else if((Mode & MSS_MODE_RECORDS) && (!Parm))
         return MSS_INVALID_COUNT;
 
-    unsigned long Offset = sizeof(MSS_Storage_Map);
+    unsigned long Offset = sizeof(MSS_Storage_Map.Version);
 
     int i = 0;
     for (; i < MSS_STORAGE_GROUP_SIZE; i++) {
@@ -203,19 +203,22 @@ int MSS_Config_Group(void* Name, unsigned long Length, unsigned char Mode, unsig
         else if(MSS_Storage_Map.Group[i].Mode & MSS_MODE_RECORDS)
             Offset += (MSS_Storage_Map.Group[i].Length * MSS_Storage_Map.Group[i].Parm);
         else if(MSS_Storage_Map.Group[i].Mode & MSS_MODE_BACKUP)
-            Offset += (MSS_Storage_Map.Group[i].Length * 2);
+            Offset += (MSS_Storage_Map.Group[i].Length * 2) + sizeof(unsigned long);
+        else if((MSS_Storage_Map.Group[i].Mode & MSS_MODE_WRITE_SAFE) || (MSS_Storage_Map.Group[i].Mode & MSS_MODE_READ_SAFE))
+            Offset += MSS_Storage_Map.Group[i].Length + sizeof(unsigned long);
         else
             Offset += MSS_Storage_Map.Group[i].Length;
     }
 
-    if (Mode & MSS_MODE_BACKUP)
-        Length *= 2;
-
     if(i == MSS_STORAGE_GROUP_SIZE)
         return MSS_GROUP_FULL;
-    else if((Offset + Length) > MSS_Storage_Size)
-        return MSS_STORAGE_FULL;
     else if((Mode & MSS_MODE_RECORDS) && ((Offset + (Length * Parm)) > MSS_Storage_Size))
+        return MSS_STORAGE_FULL;
+    else if((Mode & MSS_MODE_BACKUP) && ((Offset + (Length * 2) + sizeof(unsigned long)) > MSS_Storage_Size))
+        return MSS_STORAGE_FULL;
+    else if(((Mode & MSS_MODE_WRITE_SAFE) || (Mode & MSS_MODE_READ_SAFE)) && ((Offset + sizeof(unsigned long)) > MSS_Storage_Size))
+        return MSS_STORAGE_FULL;
+    else if((Offset + Length) > MSS_Storage_Size)
         return MSS_STORAGE_FULL;
 
     MSS_Storage_Map.Group[i].Name = Name;
@@ -223,10 +226,7 @@ int MSS_Config_Group(void* Name, unsigned long Length, unsigned char Mode, unsig
     MSS_Storage_Map.Group[i].Length = Length;
     MSS_Storage_Map.Group[i].Mode = Mode;
     MSS_Storage_Map.Group[i].Parm = Parm;
-    MSS_Storage_Map.Group[i].CRC = 0;
-
-    MSS_Storage_Prepere();
-    MSS_Storage_Write(0, (unsigned char *)&MSS_Storage_Map, sizeof(MSS_Storage_Map));
+    MSS_Storage_Map.Group[i].Timer = 0;
 
     return MSS_SUCCEED;
 }
@@ -257,7 +257,11 @@ int MSS_Update_Group(void* Name) {
         CRC = 0;
         for (unsigned long a = 0; a<Div; a++) 
             CRC += MSS_GetCRC(&((unsigned char *)MSS_Storage_Map.Group[i].Name)[(a*MSS_VALID_CHECK_LENGTH)], MSS_VALID_CHECK_LENGTH);
-        MSS_Storage_Map.Group[i].CRC = CRC;
+        MSS_Storage_Prepere();
+        if (MSS_Storage_Map.Group[i].Mode & MSS_MODE_BACKUP)
+            MSS_Storage_Write((MSS_Storage_Map.Group[i].Offset+(MSS_Storage_Map.Group[i].Length*2)), (unsigned char *)&CRC, sizeof(unsigned long));
+        else
+            MSS_Storage_Write((MSS_Storage_Map.Group[i].Offset+MSS_Storage_Map.Group[i].Length), (unsigned char *)&CRC, sizeof(unsigned long));
     }
     MSS_Storage_Prepere();
     MSS_Storage_Write(MSS_Storage_Map.Group[i].Offset, (unsigned char *)MSS_Storage_Map.Group[i].Name, MSS_Storage_Map.Group[i].Length);
@@ -292,7 +296,7 @@ int MSS_Update_Group(void* Name) {
 /*--------------------------------------------------------------------------------------------------------------------*/
 int MSS_Refresh_Group(void* Name) {
 
-    unsigned long Div, CRC_Feed;
+    unsigned long Div, CRC, CRC_Feed;
 
     if(!Name)
         return MSS_INVALID_PARAMETER;
@@ -312,17 +316,22 @@ int MSS_Refresh_Group(void* Name) {
     MSS_Storage_Prepere();
     MSS_Storage_Read(MSS_Storage_Map.Group[i].Offset, (unsigned char *)MSS_Storage_Map.Group[i].Name, MSS_Storage_Map.Group[i].Length);
     if(MSS_Storage_Map.Group[i].Mode & MSS_MODE_READ_SAFE) {
+        MSS_Storage_Prepere();
+        if (MSS_Storage_Map.Group[i].Mode & MSS_MODE_BACKUP)
+            MSS_Storage_Read((MSS_Storage_Map.Group[i].Offset+(MSS_Storage_Map.Group[i].Length*2)), (unsigned char *)&CRC, sizeof(unsigned long));
+        else
+            MSS_Storage_Read((MSS_Storage_Map.Group[i].Offset+MSS_Storage_Map.Group[i].Length), (unsigned char *)&CRC, sizeof(unsigned long));
         CRC_Feed = 0;
         for (unsigned long a = 0; a<Div; a++) 
             CRC_Feed += MSS_GetCRC(&((unsigned char *)MSS_Storage_Map.Group[i].Name)[(a*MSS_VALID_CHECK_LENGTH)], MSS_VALID_CHECK_LENGTH);
-        if(MSS_Storage_Map.Group[i].CRC != CRC_Feed) {
+        if(CRC != CRC_Feed) {
             if (MSS_Storage_Map.Group[i].Mode & MSS_MODE_BACKUP) {
                 MSS_Storage_Prepere();
                 MSS_Storage_Read((MSS_Storage_Map.Group[i].Offset+MSS_Storage_Map.Group[i].Length), (unsigned char *)MSS_Storage_Map.Group[i].Name, MSS_Storage_Map.Group[i].Length);
                 CRC_Feed = 0;
                 for (unsigned long a = 0; a<Div; a++) 
                     CRC_Feed += MSS_GetCRC(&((unsigned char *)MSS_Storage_Map.Group[i].Name)[(a*MSS_VALID_CHECK_LENGTH)], MSS_VALID_CHECK_LENGTH);
-                if(MSS_Storage_Map.Group[i].CRC != CRC_Feed)
+                if(CRC != CRC_Feed)
                     return MSS_READ_BACKUP_WRONG;
             }
             else 
