@@ -1,5 +1,5 @@
-#ifndef __BILLING_H
-#define __BILLING_H
+#ifndef __MSS_H
+#define __MSS_H
 //----------------------------------------------------------
 #define MSS_ABILITY_AUTO_SAVE                0
 
